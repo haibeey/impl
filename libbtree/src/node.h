@@ -11,7 +11,7 @@ template <typename T>
 struct Node
 {
     vector<T> keys;
-    vector<Node<T>*> children;
+    vector<unique_ptr<Node<T>>> children;
     bool leaf;
     int size = 0;
     Node(int keys_count, bool is_leaf = false)
@@ -29,13 +29,13 @@ struct Node
     {
         cout << "node child keys ";
         for (int i = 0; i <= size; i++)
-            for (int j = 0; j < children[i]->size; j++)
-                cout << children[i]->keys[j] << " ";
+            for (int j = 0; j < children[i].get()->size; j++)
+                cout << children[i].get()->keys[j] << " ";
         cout << "\n";
     }
 
-
-    void printNode() const{
+    void printNode() const
+    {
         printKeys(0);
         ifstream inputFile("out.txt");
         string line = "";
@@ -47,10 +47,9 @@ struct Node
         }
 
         while (getline(inputFile, line))
-            cout << line << "\n" ;
+            cout << line << "\n";
 
         remove("out.txt");
-
     }
 
     void printKeys(int depth = 0) const
@@ -111,6 +110,6 @@ struct Node
         outputFile.close();
         if (!leaf)
             for (int i = 0; i <= size; i++)
-                children[i]->printKeys(depth + 1);
+                children[i].get()->printKeys(depth + 1);
     }
 };

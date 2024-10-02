@@ -9,7 +9,7 @@ class Btree
 private:
     int keys_count;
     int t;
-    Node<T> *root;
+    unique_ptr<Node<T>> root;
 
     void insertNonFull(Node<T> *node, T key);
     void splitChild(Node<T> *node, int index);
@@ -26,9 +26,8 @@ public:
     {
         this->t = keys_count;
         this->keys_count = (2 * keys_count) - 1;
-        this->root = new Node<T>(this->keys_count, true);
+        this->root = make_unique<Node<T>>(this->keys_count, true);
     }
-    ~Btree() {}
 
     Node<T> *Search(T k);
     void Insert(T key);
@@ -46,14 +45,14 @@ public:
 
     Node<T> *getRoot()
     {
-        return root;
+        return root.get();
     }
 };
 
 template <typename T>
 Node<T> *Btree<T>::Search(T k)
 {
-    return searchHelper(this->root, k);
+    return searchHelper(this->root.get(), k);
 }
 
 template <typename T>
@@ -67,18 +66,17 @@ Node<T> *Btree<T>::searchHelper(Node<T> *node, T key)
     else if (node->leaf)
         return nullptr;
     else
-        return searchHelper(node->children[i], key);
+        return searchHelper(node->children[i].get(), key);
 }
 
 template <typename T>
 void Btree<T>::splitChild(Node<T> *x, int index)
 {
-    Node<T> *y = x->children[index];
-    Node<T> *new_node = new Node<T>(this->getKeyCount());
-    Node<T> *z = new_node;
+    Node<T> *y = x->children[index].get();
+    unique_ptr<Node<T>> z = make_unique<Node<T>>(this->getKeyCount());
     int t = this->t;
-    z->leaf = y->leaf;
-    z->size = t - 1;
+    z.get()->leaf = y->leaf;
+    z.get()->size = t - 1;
 
     for (int i = 0; i < t - 1; i++)
         z->keys[i] = y->keys[i + t];
@@ -86,15 +84,15 @@ void Btree<T>::splitChild(Node<T> *x, int index)
     if (!y->leaf)
     {
         for (int i = 0; i < t; i++)
-            z->children[i] = y->children[i + t];
+            z->children[i] = move(y->children[i + t]);
     }
 
     y->size = t - 1;
 
     for (int i = x->size; i > index; i--)
-        x->children[i] = x->children[i - 1];
+        x->children[i] = move(x->children[i - 1]);
 
-    x->children[index + 1] = new_node;
+    x->children[index + 1] = move(z);
 
     for (int i = x->size; i > index; i--)
         x->keys[i] = x->keys[i - 1];
@@ -106,15 +104,14 @@ void Btree<T>::splitChild(Node<T> *x, int index)
 template <typename T>
 void Btree<T>::Insert(T key)
 {
-    Node<T> *r = this->root;
+    Node<T> *r = this->root.get();
     if (r->size == getKeyCount())
     {
-        Node<T> *new_node = new Node<T>(this->getKeyCount());
-        Node<T> *s = new_node;
-        s->children[0] = this->root;
-        this->root = new_node;
-        splitChild(s, 0);
-        insertNonFull(s, key);
+        unique_ptr<Node<T>> new_node = make_unique<Node<T>>(this->getKeyCount());
+        new_node.get()->children[0] = move(this->root);
+        this->root = move(new_node);
+        splitChild(this->root.get(), 0);
+        insertNonFull(this->root.get(), key);
     }
     else
         insertNonFull(r, key);
@@ -146,7 +143,7 @@ void Btree<T>::insertNonFull(Node<T> *node, T k)
                 ++index;
         }
 
-        insertNonFull(node->children[index], k);
+        insertNonFull(node->children[index].get(), k);
     }
 }
 
@@ -177,7 +174,7 @@ void Btree<T>::deleteHelper(Node<T> *node, T key)
     if (node->keys[index] == key)
         deleteInternalNode(node, key, index);
     else if (node->children[index]->size >= t)
-        deleteHelper(node->children[index], key);
+        deleteHelper(node->children[index].get(), key);
     else
     {
         if (index != 0 && index + 2 <= node->size)
@@ -199,7 +196,7 @@ void Btree<T>::deleteHelper(Node<T> *node, T key)
             else
                 merge(node, index, index - 1);
         }
-        deleteHelper(node->children[index], key);
+        deleteHelper(node->children[index].get(), key);
     }
 }
 
@@ -215,13 +212,13 @@ void Btree<T>::deleteInternalNode(Node<T> *node, T key, int index)
         }
 
     if (node->children[index]->size >= t)
-        node->keys[index] = deletePredecessor(node->children[index]);
+        node->keys[index] = deletePredecessor(node->children[index].get());
     else if (node->children[index + 1]->size >= t)
-        node->keys[index] = deleteSuccessor(node->children[index + 1]);
+        node->keys[index] = deleteSuccessor(node->children[index + 1].get());
     else
     {
         merge(node, index, index + 1);
-        deleteInternalNode(node->children[index], key, t - 1);
+        deleteInternalNode(node->children[index].get(), key, t - 1);
     }
 }
 
@@ -239,7 +236,7 @@ T Btree<T>::deletePredecessor(Node<T> *node)
     else
         merge(node, node->size - 1, node->size);
 
-    return deletePredecessor(node->children[node->size - 1]);
+    return deletePredecessor(node->children[node->size - 1].get());
 }
 
 template <typename T>
@@ -258,15 +255,15 @@ T Btree<T>::deleteSuccessor(Node<T> *node)
     else
         merge(node, 0, 1);
 
-    return deleteSuccessor(node->children[0]);
+    return deleteSuccessor(node->children[0].get());
 }
 
 template <typename T>
 void Btree<T>::merge(Node<T> *node, int A, int B)
 {
 
-    Node<T> *nodeA = node->children[A];
-    Node<T> *nodeB = node->children[B];
+    Node<T> *nodeA = node->children[A].get();
+    Node<T> *nodeB = node->children[B].get();
 
     if (B > A)
     {
@@ -279,7 +276,7 @@ void Btree<T>::merge(Node<T> *node, int A, int B)
                 nodeA->keys[nodeA->size + i] = nodeB->keys[i];
 
             if (!nodeB->leaf)
-                nodeA->children[nodeA->size + i] = nodeB->children[i];
+                nodeA->children[nodeA->size + i] = move(nodeB->children[i]);
         }
         nodeA->size += nodeB->size;
         nodeB->size = 0;
@@ -288,7 +285,7 @@ void Btree<T>::merge(Node<T> *node, int A, int B)
         --node->size;
 
         if (node == getRoot() && node->size <= 0)
-            this->root = nodeA;
+            this->root = move(node->children[A]);
     }
     else
     {
@@ -301,7 +298,7 @@ void Btree<T>::merge(Node<T> *node, int A, int B)
                 nodeB->keys[nodeB->size + i] = nodeA->keys[i];
 
             if (!nodeA->leaf)
-                nodeB->children[nodeB->size + i] = nodeA->children[i];
+                nodeB->children[nodeB->size + i] = move(nodeA->children[i]);
         }
 
         nodeB->size += nodeA->size;
@@ -311,21 +308,21 @@ void Btree<T>::merge(Node<T> *node, int A, int B)
         --node->size;
 
         if (node == getRoot() && node->size <= 0)
-            this->root = nodeB;
+            this->root = move(node->children[B]);
     }
 }
 
 template <typename T>
 void Btree<T>::takeFromSibling(Node<T> *node, int A, int B)
 {
-    Node<T> *nodeA = node->children[A];
-    Node<T> *nodeB = node->children[B];
+    Node<T> *nodeA = node->children[A].get();
+    Node<T> *nodeB = node->children[B].get();
     if (A < B)
     {
         // Taking right child key from node B
         nodeA->keys[nodeA->size] = node->keys[A];
         if (!nodeB->leaf)
-            nodeA->children[nodeA->size] = nodeB->children[0];
+            nodeA->children[nodeA->size] = move(nodeB->children[0]);
         node->keys[A] = nodeB->keys[0];
         nodeB->keys.erase(nodeB->keys.begin());
         if (!nodeB->leaf)
@@ -339,7 +336,11 @@ void Btree<T>::takeFromSibling(Node<T> *node, int A, int B)
         nodeA->keys.insert(nodeA->keys.begin(), node->keys[A - 1]);
         node->keys[A - 1] = nodeB->keys[nodeB->size - 1];
         if (!nodeB->leaf)
-            nodeA->children.insert(nodeA->children.begin(), nodeB->children[nodeB->size - 1]);
+        {
+            nodeA->children.insert(nodeA->children.begin(), nullptr);
+            nodeA->children[0] = move(nodeB->children[nodeB->size - 1]);
+        }
+
         ++nodeA->size;
         --nodeB->size;
     }
