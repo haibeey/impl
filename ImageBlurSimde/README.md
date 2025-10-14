@@ -10,4 +10,4 @@
 
 *make*
 
-**which gives you libimageblur.a which you can use anywhere.**
+**which gives you libimageblur.a**
