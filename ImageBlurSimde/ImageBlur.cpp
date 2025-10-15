@@ -3,6 +3,7 @@
 #include "ImageBlur.hpp"
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <simde/x86/avx2.h>
 #include <simde/x86/sse2.h>
 
@@ -85,15 +86,13 @@ void ImageBlur::blur_image_helper(unsigned char *data, int height, int width,
     j++;
   }
 
-  int *temp_dst_out =
-      (int *)malloc(blur_strength * width * RGB_CHANNELS * sizeof(int));
-  if (!temp_dst_out)
-    return;
+  auto temp_dst_out =
+      std::make_unique<int[]>(blur_strength * width * RGB_CHANNELS);
 
   int *temp_dst_rows[blur_strength];
 
   for (int i = 0; i < blur_strength; i++) {
-    temp_dst_rows[i] = temp_dst_out + (i * width * RGB_CHANNELS);
+    temp_dst_rows[i] = temp_dst_out.get() + (i * width * RGB_CHANNELS);
   }
 
   int s_y = -blur_strength / 2;
@@ -135,8 +134,7 @@ void ImageBlur::blur_image_helper(unsigned char *data, int height, int width,
         temp_out += (5 * RGB_CHANNELS);
       }
 
-      x = blur_1d_3c(x, width, cur_src, width, temp_out,
-                     blur_strength);
+      x = blur_1d_3c(x, width, cur_src, width, temp_out, blur_strength);
     }
 
     unsigned char *out_row = data + (RGB_CHANNELS * width * y);
@@ -165,8 +163,8 @@ void ImageBlur::blur_image_helper(unsigned char *data, int height, int width,
 
     int add = 1;
     for (int i = blur_strength / 2; i < blur_strength; i++) {
-      rows[i] = data + (reflect_index(y + add, height)) *
-                           (width * RGB_CHANNELS);
+      rows[i] =
+          data + (reflect_index(y + add, height)) * (width * RGB_CHANNELS);
       add++;
     }
 
@@ -183,7 +181,6 @@ void ImageBlur::blur_image_helper(unsigned char *data, int height, int width,
 
     s_y = 1;
   }
-  free(temp_dst_out);
 }
 
 void ImageBlur::blur_image(unsigned char *imgBuf, int height, int width,
